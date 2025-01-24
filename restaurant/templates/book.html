@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<section>
+  <article>
+    <h1>Make a reservation</h1>
+    <!-- Başlangıç: Satır -->
+    <div class="row">
+      <!-- Başlangıç: Kolon -->
+      <div class="column">
+          {% csrf_token %}
+          <form method="POST" id="form">
+            <p>
+              <!-- Kullanıcıdan ad bilgisi alınan alan -->
+              <label for="first_name">Name:</label>
+              <input type="text" placeholder="Your Name" maxlength="200" required="" id="first_name">
+            </p>
+            <p>
+              <!-- Kullanıcıdan rezervasyon tarihi alınan alan -->
+              <label for="reservation_date">Reservation Date:</label>
+              <input type="date" id="reservation_date">
+            </p>
+            <p>
+              <!-- Kullanıcıdan rezervasyon zamanı seçmesi için dropdown -->
+              <label for="reservation_slot">Reservation Time:</label>
+              <select id="reservation_slot">
+                <option value="0" disabled>Select time</option>
+              </select>
+            </p>
+            <button type="button" id="button">Reserve</button>
+          </form>
+      </div>
+      <!-- Bitiş: Kolon -->
+
+      <!-- Başlangıç: İkinci Kolon -->
+      <div class="column">
+        <h2>Bookings For <span id="today"></span></h2>
+        <!-- Rezervasyon bilgilerini göstereceğimiz alan -->
+        <div id="bookings"></div>
+      </div>
+      <!-- Bitiş: Kolon -->
+    </div>
+    <!-- Bitiş: Satır -->
+  </article>
+</section>
+
+<script>
+  // Mevcut tarihi alıp rezervasyon tarihi alanına varsayılan olarak yazdırıyoruz.
+  const date = new Date()
+  document.getElementById('reservation_date').value = `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, "0")}-${date.getDate().toString().padStart(2, "0")}`
+
+  // Rezervasyon tarihi alanının başlangıç değerini konsola yazdırıyoruz.
+  console.log(document.getElementById('reservation_date').value)
+
+  // İlk yüklemede mevcut rezervasyonları alıyoruz.
+  getBookings()
+
+  // Tarih değiştiğinde `getBookings` fonksiyonunu çağırıyoruz.
+  document.getElementById('reservation_date').addEventListener('change', function () {
+    getBookings();
+  });
+
+  // Rezervasyonları sunucudan çekip ekrana yazdıran fonksiyon
+  function getBookings() {
+    let reserved_slots = [] // Daha önce rezerve edilmiş saatleri saklayacağımız dizi
+    const date = document.getElementById('reservation_date').value // Kullanıcının seçtiği tarihi alıyoruz.
+    document.getElementById('today').innerHTML = date // Tarihi ekranda gösteriyoruz.
+
+    fetch("{% url 'bookings' %}" + '?date=' + date) // Seçilen tarihe göre rezervasyonları alıyoruz
+      .then(r => r.json()) // Gelen cevabı JSON'a dönüştürüyoruz
+      .then(data => {
+        reserved_slots = [] // Eski rezervasyon saatlerini temizliyoruz
+        let bookings = '' // Rezervasyonları göstermek için bir değişken tanımlıyoruz
+        let slot_options = '<option value="0" disabled>Select time</option>' // Dropdown seçenekleri
+
+        // Sunucudan gelen rezervasyon verilerini işliyoruz.
+        data.forEach(item => {
+          console.log(item.fields) // Rezervasyon detaylarını konsola yazdırıyoruz
+          reserved_slots.push(item.fields.reservation_slot) // Rezervasyon saatlerini diziye ekliyoruz
+          bookings += `<p>${item.fields.first_name} - ${formatTime(item.fields.reservation_slot)}</p>` // Kullanıcının rezervasyonlarını oluşturuyoruz
+        });
+
+        // Saat aralıklarını güncelleyip müsait olup olmadıklarını kontrol ediyoruz
+        for (let i = 10; i < 20; i++) {
+          const label = formatTime(i); // Saati okunabilir bir formata çeviriyoruz
+          if (reserved_slots.includes(i)) { // Eğer saat daha önce rezerve edilmişse
+            slot_options += `<option value="${i}" disabled>${label}</option>`
+          } else { // Eğer saat müsaitse
+            slot_options += `<option value="${i}">${label}</option>`
+          }
+        }
+
+        // Dropdown ve rezervasyon bilgilerini sayfaya yazdırıyoruz
+        document.getElementById('reservation_slot').innerHTML = slot_options
+        document.getElementById('bookings').innerHTML = bookings || "No bookings" // Eğer rezervasyon yoksa bilgi göster
+      })
+  }
+
+  // Saat formatını okunabilir hale getiriyor (Örnek: 10 AM, 2 PM).
+  function formatTime(time) {
+    const ampm = time < 12 ? 'AM' : 'PM' // Öğleden önce/sonra bilgisi
+    const t = time < 12 ? time : time > 12 ? time - 12 : time // Saati 12 saat formatına çeviriyoruz
+    return `${t} ${ampm}`
+  }
+
+  // Kullanıcı rezervasyon yap butonuna bastığında çalışan fonksiyon
+  document.getElementById('button').addEventListener('click', function () {
+    const formdata = {
+      first_name: document.getElementById('first_name').value, // Kullanıcı adı
+      reservation_date: document.getElementById('reservation_date').value, // Rezervasyon tarihi
+      reservation_slot: document.getElementById('reservation_slot').value, // Rezervasyon saati
+    }
+
+    // Sunucuya POST isteği gönderiyoruz
+    fetch("{% url 'bookings' %}", {
+      method: 'post',
+      body: JSON.stringify(formdata), // Form verilerini JSON olarak gönderiyoruz
+      headers: { 'Content-Type': 'application/json' } // İçerik türünü belirtiyoruz
+    })
+    .then(r => r.text())
+    .then(data => {
+      getBookings() // Rezervasyon başarıyla yapıldıysa verileri yeniliyoruz
+    })
+  })
+</script>
+{% endblock %}
